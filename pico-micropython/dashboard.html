@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sunrise Alarm</title>
+<style>
+  /* ── Google Fonts (works when Pico connects to a router with internet;
+        falls back gracefully to system monospace in AP-only mode) ── */
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f5f0ea;
+    --card:      #fff9f2;
+    --border:    #e8ddd0;
+    --text:      #2e2418;
+    --muted:     #b09e8a;
+    --accent-o:  #c97b4b;
+    --accent-r:  #c95050;
+    --accent-t:  #5a9ea8;
+    --accent-g:  #3a7d55;
+    --badge-g:   #eef8f1;
+    --font-body: 'Space Grotesk', system-ui, sans-serif;
+    --font-mono: 'Share Tech Mono', 'Courier New', monospace;
+    --radius:    14px;
+  }
+
+  html, body {
+    min-height: 100vh;
+    background: var(--bg);
+    font-family: var(--font-body);
+    color: var(--text);
+  }
+
+  /* ── Layout ── */
+  .dash {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 20px 40px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: clamp(22px, 5vw, 32px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 24px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+
+  .card-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .card-label .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .card-value {
+    font-family: var(--font-mono);
+    font-size: clamp(24px, 5vw, 32px);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .card-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .card-sub .up { color: var(--accent-o); font-weight: 600; }
+
+  /* ── Top row ── */
+  .top-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 520px) {
+    .top-row { grid-template-columns: 1fr; }
+  }
+
+  /* ── Status card ── */
+  .status-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .status-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .status-time { font-family: var(--font-mono); font-size: 22px; }
+
+  .badge {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    transition: background 0.4s, color 0.4s;
+  }
+  .badge .bdot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .badge.idle     { background: var(--badge-g); color: var(--accent-g); }
+  .badge.idle .bdot     { background: var(--accent-g); }
+  .badge.sunrise  { background: #fff4e5; color: #b06a10; }
+  .badge.sunrise .bdot  { background: #e8a830; }
+  .badge.alarming { background: #fdeaea; color: #993030; }
+  .badge.alarming .bdot { background: var(--accent-r); animation: pulse 0.9s infinite; }
+  .badge.snoozed  { background: #e5f1f4; color: #2e737e; }
+  .badge.snoozed .bdot  { background: var(--accent-t); }
+  .badge.disabled { background: #f0ede9; color: var(--muted); }
+  .badge.disabled .bdot { background: var(--muted); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.35; }
+  }
+
+  /* ── Buttons ── */
+  .btn-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 400px) {
+    .btn-row { grid-template-columns: 1fr; }
+  }
+
+  .btn {
+    padding: 13px 8px;
+    border: none;
+    border-radius: 10px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fff;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn:hover  { opacity: 0.88; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0) scale(0.98); opacity: 1; }
+  .btn-set  { background: var(--accent-t); }
+  .btn-snz  { background: var(--accent-o); }
+  .btn-dis  { background: var(--accent-r); }
+
+  /* ── Set-alarm modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(46, 36, 24, 0.35);
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 28px 28px 24px;
+    width: min(340px, 90vw);
+  }
+  .modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 18px; }
+  .modal label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  .modal input[type="time"] {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 28px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    background: var(--bg);
+    color: var(--text);
+    margin-bottom: 18px;
+    outline: none;
+  }
+  .modal input[type="time"]:focus { border-color: var(--accent-t); }
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns .btn { flex: 1; }
+  .btn-cancel { background: var(--border); color: var(--muted); }
+
+  /* ── Bottom row ── */
+  .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 480px) {
+    .bottom-row { grid-template-columns: 1fr; }
+  }
+
+  /* ── LED Ring ── */
+  .ring-wrap {
+    position: relative;
+    width: 88px; height: 88px;
+    margin: 10px auto 8px;
+  }
+  .ring-dot {
+    position: absolute;
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: background 1.2s ease, box-shadow 1.2s ease;
+  }
+  .ring-center-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+  }
+
+  /* ── Progress bar ── */
+  .prog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    margin-top: 12px;
+  }
+  .prog-header strong { color: var(--text); font-size: 14px; font-weight: 600; }
+  .prog-bg {
+    background: #ece5dc;
+    border-radius: 8px;
+    height: 8px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .prog-fill {
+    height: 100%;
+    border-radius: 8px;
+    background: linear-gradient(90deg, #8b1a0a, #c97b4b, #e8a830);
+    transition: width 1.5s ease;
+    width: 0%;
+  }
+  .prog-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .prog-footer strong { color: var(--text); font-weight: 600; }
+
+  /* ── Toast notification ── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--text);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 20px;
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    z-index: 200;
+    white-space: nowrap;
+  }
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+</style>
+</head>
+<body>
+
+<div class="dash">
+  <h1>Sunrise Alarm</h1>
+
+  <!-- Top row: clock, temp, humidity -->
+  <div class="top-row">
+    <div class="card">
+      <div class="card-label">
+        <span class="dot" style="background:var(--accent-o)"></span>
+        Time &amp; Date
+      </div>
+      <div class="card-value" id="time">--:--:--</div>
+      <div class="card-sub" id="date">Saturday</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">
+        <span class="dot" style="background:var(--accent-r)"></span>
+        Temperature
+      </div>
+      <div class="card-value" id="temp">--.-°</div>
+      <div class="card-sub" id="temp-sub">&nbsp;</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">
+        <span class="dot" style="background:var(--accent-t)"></span>
+        Humidity
+      </div>
+      <div class="card-value" id="hum">--%</div>
+      <div class="card-sub" id="hum-sub">&nbsp;</div>
+    </div>
+  </div>
+
+  <!-- Alarm status -->
+  <div class="card status-card">
+    <div>
+      <div class="status-label">Next alarm</div>
+      <div class="status-time" id="alarm-time">--:--</div>
+    </div>
+    <div class="badge idle" id="status-badge">
+      <div class="bdot"></div>
+      <span id="status-text">Idle</span>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="btn-row">
+    <button class="btn btn-set" id="btn-set">Set Alarm</button>
+    <button class="btn btn-snz" id="btn-snz">Snooze</button>
+    <button class="btn btn-dis" id="btn-dis">Disable</button>
+  </div>
+
+  <!-- Bottom row: LED ring + progress -->
+  <div class="bottom-row">
+    <div class="card">
+      <div class="card-label">
+        <span class="dot" style="background:#e8a830"></span>
+        LED Ring
+      </div>
+      <div class="ring-wrap">
+        <div id="ring"></div>
+        <div class="ring-center-label" id="ring-label">Off</div>
+      </div>
+      <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:2px" id="phase-label">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">
+        <span class="dot" style="background:var(--accent-o)"></span>
+        Sunrise Progress
+      </div>
+      <div class="prog-header">
+        <span>Progress</span>
+        <strong id="prog-pct">0%</strong>
+      </div>
+      <div class="prog-bg">
+        <div class="prog-fill" id="prog-fill"></div>
+      </div>
+      <div class="prog-footer">
+        <span>Remaining</span>
+        <strong id="prog-remaining">—</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Set Alarm modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2>Set Alarm</h2>
+    <label for="alarm-input">Alarm time</label>
+    <input type="time" id="alarm-input" value="07:30">
+    <div class="modal-btns">
+      <button class="btn btn-cancel" id="btn-modal-cancel">Cancel</button>
+      <button class="btn btn-set" id="btn-modal-confirm">Set</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── LED ring colours per sunrise phase ──────────────────────────────────────
+const RING_COLORS = {
+  0: Array(16).fill("#2a2018"),     // off – dim warm dark
+  1: ["#6b1010","#6b1010","#7a1a0a","#7a1a0a","#8f2208","#8f2208",
+      "#6b1010","#6b1010","#7a1a0a","#7a1a0a","#8f2208","#8f2208",
+      "#6b1010","#6b1010","#7a1a0a","#7a1a0a"],  // deep red
+  2: ["#6b1010","#7a1a0a","#8f2208","#a33510","#b84e14","#c97b4b",
+      "#d49040","#c97b4b","#b84e14","#a33510","#8f2208","#7a1a0a",
+      "#6b1010","#7a1a0a","#8f2208","#a33510"],  // orange
+  3: ["#c97b4b","#d49040","#dfa830","#e8c040","#e8d070","#e8dc90",
+      "#e8e0a8","#e8e4b8","#e8e8c8","#f0f0d8","#f8f8ee","#e8e4b8",
+      "#e8dc90","#e8d070","#e8c040","#dfa830"],  // warm white
+};
+
+const PHASE_LABELS = {
+  0: "Off",
+  1: "Deep red · warming up",
+  2: "Orange · mid-sunrise",
+  3: "Warm white · peak",
+};
+
+const RING_CENTER = {
+  0: "Off",
+  1: "Phase 1",
+  2: "Phase 2",
+  3: "Peak",
+};
+
+// ── Build ring dots ──────────────────────────────────────────────────────────
+const ringEl = document.getElementById("ring");
+ringEl.style.cssText = "position:absolute;inset:0";
+const dots = [];
+for (let i = 0; i < 16; i++) {
+  const angle = (i / 16) * 2 * Math.PI - Math.PI / 2;
+  const d = document.createElement("div");
+  d.className = "ring-dot";
+  d.style.left  = (50 + 42 * Math.cos(angle)) + "%";
+  d.style.top   = (50 + 42 * Math.sin(angle)) + "%";
+  d.style.background = "#2a2018";
+  ringEl.appendChild(d);
+  dots.push(d);
+}
+
+function setRingPhase(phase) {
+  const colors = RING_COLORS[phase] || RING_COLORS[0];
+  dots.forEach((d, i) => {
+    d.style.background = colors[i];
+    d.style.boxShadow  = phase > 0 ? `0 0 5px ${colors[i]}99` : "none";
+  });
+  document.getElementById("ring-label").textContent  = RING_CENTER[phase] || "Off";
+  document.getElementById("phase-label").textContent = PHASE_LABELS[phase] || "—";
+}
+
+// ── Status badge ─────────────────────────────────────────────────────────────
+const STATUS_MAP = {
+  "IDLE":     { cls: "idle",     label: "Idle" },
+  "SUNRISE":  { cls: "sunrise",  label: "Sunrise" },
+  "ALARMING": { cls: "alarming", label: "Alarming" },
+  "SNOOZED":  { cls: "snoozed",  label: "Snoozed" },
+  "DISABLED": { cls: "disabled", label: "Disabled" },
+};
+function updateBadge(status) {
+  const badge = document.getElementById("status-badge");
+  const info  = STATUS_MAP[status] || STATUS_MAP["IDLE"];
+  badge.className = "badge " + info.cls;
+  document.getElementById("status-text").textContent = info.label;
+}
+
+// ── Humidity comfort label ────────────────────────────────────────────────────
+function humLabel(h) {
+  const v = parseFloat(h);
+  if (isNaN(v)) return "";
+  if (v < 30) return "Dry – below ideal";
+  if (v < 60) return "Comfortable range";
+  return "Humid – above ideal";
+}
+
+// ── Poll /status every 2 s ───────────────────────────────────────────────────
+let prevTemp = null;
+async function fetchStatus() {
+  try {
+    const res  = await fetch("/status");
+    const data = await res.json();
+
+    document.getElementById("time").textContent = data.time || "--:--:--";
+    document.getElementById("date").textContent = data.date || "";
+
+    const tempVal = parseFloat(data.temp);
+    document.getElementById("temp").textContent = isNaN(tempVal) ? "--.-°" : tempVal.toFixed(1) + "°";
+    if (prevTemp !== null && !isNaN(tempVal)) {
+      const diff = tempVal - prevTemp;
+      const sign = diff >= 0 ? "↑" : "↓";
+      const sub  = document.getElementById("temp-sub");
+      sub.innerHTML = `<span class="up">${sign} ${Math.abs(diff).toFixed(1)}°</span> since last poll`;
+    }
+    if (!isNaN(tempVal)) prevTemp = tempVal;
+
+    document.getElementById("hum").textContent     = isNaN(parseFloat(data.hum)) ? "--%"  : data.hum + "%";
+    document.getElementById("hum-sub").textContent = humLabel(data.hum);
+
+    const alarmDisplay = data.alarm && data.alarm !== "--:--" ? data.alarm + " AM" : "--:--";
+    document.getElementById("alarm-time").textContent = alarmDisplay;
+
+    updateBadge(data.status || "IDLE");
+    setRingPhase(parseInt(data.led_phase) || 0);
+
+    const prog = parseInt(data.led_prog) || 0;
+    document.getElementById("prog-fill").style.width  = prog + "%";
+    document.getElementById("prog-pct").textContent   = prog + "%";
+    document.getElementById("prog-remaining").textContent = data.remaining || "—";
+
+  } catch (e) {
+    console.warn("Status fetch failed:", e);
+  }
+}
+fetchStatus();
+setInterval(fetchStatus, 2000);
+
+// ── Toast helper ─────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+// ── Post helpers ─────────────────────────────────────────────────────────────
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+// ── Snooze ───────────────────────────────────────────────────────────────────
+document.getElementById("btn-snz").addEventListener("click", async () => {
+  try {
+    await post("/snooze", {});
+    showToast("Snoozed for 5 minutes ⏰");
+  } catch { showToast("Could not reach device"); }
+});
+
+// ── Disable ──────────────────────────────────────────────────────────────────
+document.getElementById("btn-dis").addEventListener("click", async () => {
+  try {
+    await post("/disable", {});
+    showToast("Alarm disabled ✓");
+  } catch { showToast("Could not reach device"); }
+});
+
+// ── Set Alarm modal ───────────────────────────────────────────────────────────
+const modal = document.getElementById("modal");
+document.getElementById("btn-set").addEventListener("click", () => {
+  modal.classList.add("open");
+  document.getElementById("alarm-input").focus();
+});
+document.getElementById("btn-modal-cancel").addEventListener("click", () => {
+  modal.classList.remove("open");
+});
+modal.addEventListener("click", (e) => {
+  if (e.target === modal) modal.classList.remove("open");
+});
+document.getElementById("btn-modal-confirm").addEventListener("click", async () => {
+  const t = document.getElementById("alarm-input").value;
+  if (!t) { showToast("Please pick a time"); return; }
+  try {
+    await post("/set_alarm", { time: t });
+    showToast(`Alarm set for ${t} ✓`);
+    modal.classList.remove("open");
+
+    // Sync device time as well
+    const now = new Date();
+    const hh  = String(now.getHours()).padStart(2, "0");
+    const mm  = String(now.getMinutes()).padStart(2, "0");
+    const ss  = String(now.getSeconds()).padStart(2, "0");
+    await post("/sync_time", { time: `${hh}:${mm}:${ss}` });
+  } catch { showToast("Could not reach device"); }
+});
+</script>
+</body>
+</html>
